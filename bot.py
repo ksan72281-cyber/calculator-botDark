@@ -5,7 +5,7 @@ from flask import Flask
 import threading
 from telebot.types import InlineQueryResultArticle, InputTextMessageContent
 
-TOKEN = '8787754774:AAEOPMrAfMhHFviaEHWFUSE_2P6RIVlmUxM'
+TOKEN = '8743380551:AAFRFCymI2vewEJ4H66WulrJcmlTl-Jscaw'
 bot = telebot.TeleBot(TOKEN)
 
 allowed_math_functions = {k: v for k, v in math.__dict__.items() if not k.startswith("__")}

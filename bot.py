@@ -5,8 +5,8 @@ from flask import Flask
 import threading
 from telebot.types import InlineQueryResultArticle, InputTextMessageContent # ဒီ line ကို အပေါ်ဆုံးမှာ Import လုပ်ပေးပါ
 
-# သင့်ရဲ့ Bot API Token 
-TOKEN = 'TOKEN = '8787754774:AAEOPMrAfMhHFviaEHWFUSE_2P6RIVlmUxM'
+# သင့်ရဲ့ Bot API Token
+'TOKEN = '8787754774:AAEOPMrAfMhHFviaEHWFUSE_2P6RIVlmUxM'
 bot = telebot.TeleBot(TOKEN)
 
 # သင်္ချာတွက်ချက်မှုများအတွက်

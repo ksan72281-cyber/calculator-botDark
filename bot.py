@@ -13,25 +13,43 @@ allowed_math_functions = {k: v for k, v in math.__dict__.items() if not k.starts
 allowed_math_functions['abs'] = abs
 allowed_math_functions['round'] = round
 
-# User တိုင်းအတွက် total သိမ်းမယ်
-user_totals = {}
+# ✅ FIX: chat_id နဲ့ track လုပ်မယ် (group တစ်ခုလုံး balance share လုပ်နိုင်အောင်)
+chat_totals = {}
+chat_histories = {}
 
-def get_total(user_id):
-    return user_totals.get(user_id, 0)
+def get_tracking_id(message):
+    """Group chat → chat_id သုံး | Private → user_id သုံး"""
+    if message.chat.type == 'private':
+        return message.from_user.id
+    return message.chat.id
 
-def add_amount(user_id, amount):
-    if user_id not in user_totals:
-        user_totals[user_id] = 0
-    user_totals[user_id] += amount
-    return user_totals[user_id]
+def get_total(tracking_id):
+    return chat_totals.get(tracking_id, 0)
+
+def add_amount(tracking_id, amount):
+    if tracking_id not in chat_totals:
+        chat_totals[tracking_id] = 0
+    chat_totals[tracking_id] += amount
+    return chat_totals[tracking_id]
+
+def add_history(tracking_id, amount, total, username=""):
+    if tracking_id not in chat_histories:
+        chat_histories[tracking_id] = []
+    sign = "+" if amount > 0 else ""
+    name_str = f"[{username}] " if username else ""
+    chat_histories[tracking_id].append(
+        f"{name_str}{sign}{amount:,} Ks → စုစုပေါင်း: {total:,} Ks"
+    )
+    if len(chat_histories[tracking_id]) > 10:
+        chat_histories[tracking_id] = chat_histories[tracking_id][-10:]
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     bot.reply_to(message,
-        "🧮 *Kiwii Calculator Bot*\n\n"
+        "🧮 *DarkCalculator Bot*\n\n"
         "*တွက်ချက်မှု:*\n"
         "`100+200*3` → တွက်ချက်ပေးမယ်\n\n"
-        "*KBZPay စုစုပေါင်း:*\n"
+        "*စုစုပေါင်း:*\n"
         "`+5000` → 5,000 ထည့်မယ်\n"
         "`-3000` → 3,000 နုတ်မယ်\n"
         "/total → စုစုပေါင်းကြည့်\n"
@@ -43,8 +61,8 @@ def send_welcome(message):
 
 @bot.message_handler(commands=['total'])
 def show_total(message):
-    user_id = message.from_user.id
-    total = get_total(user_id)
+    tracking_id = get_tracking_id(message)
+    total = get_total(tracking_id)
     bot.reply_to(message,
         f"💰 *စုစုပေါင်း:*\n`{total:,} Ks`",
         parse_mode='Markdown'
@@ -52,9 +70,9 @@ def show_total(message):
 
 @bot.message_handler(commands=['reset'])
 def reset_total(message):
-    user_id = message.from_user.id
-    user_totals[user_id] = 0
-    user_histories[user_id] = []
+    tracking_id = get_tracking_id(message)
+    chat_totals[tracking_id] = 0
+    chat_histories[tracking_id] = []
     bot.reply_to(message, "✅ Reset လုပ်ပြီး။ စုစုပေါင်း = 0 Ks")
 
 @bot.message_handler(commands=['edit'])
@@ -66,22 +84,10 @@ def edit_total(message):
         parse_mode='Markdown'
     )
 
-# History သိမ်းမယ်
-user_histories = {}
-
-def add_history(user_id, amount, total):
-    if user_id not in user_histories:
-        user_histories[user_id] = []
-    sign = "+" if amount > 0 else ""
-    user_histories[user_id].append(f"{sign}{amount:,} Ks → စုစုပေါင်း: {total:,} Ks")
-    # နောက်ဆုံး 10 ခုသာ သိမ်း
-    if len(user_histories[user_id]) > 10:
-        user_histories[user_id] = user_histories[user_id][-10:]
-
 @bot.message_handler(commands=['history'])
 def show_history(message):
-    user_id = message.from_user.id
-    history = user_histories.get(user_id, [])
+    tracking_id = get_tracking_id(message)
+    history = chat_histories.get(tracking_id, [])
     if not history:
         bot.reply_to(message, "📋 မှတ်တမ်း မရှိသေးပါ")
         return
@@ -92,16 +98,24 @@ def show_history(message):
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
-    user_id = message.from_user.id
+    tracking_id = get_tracking_id(message)
     text = message.text.strip()
+    username = message.from_user.first_name or message.from_user.username or ""
+
+    # Reset (text အနေနဲ့ ရေးလျှင်လည်း အလုပ်လုပ်မယ်)
+    if text.lower() == 'reset':
+        chat_totals[tracking_id] = 0
+        chat_histories[tracking_id] = []
+        bot.reply_to(message, "✅ Reset လုပ်ပြီး။ စုစုပေါင်း = 0 Ks")
+        return
 
     # =50000 → total ကို တိုက်ရိုက် သတ်မှတ်
-    if re.match(r'^=\d+(\.\d+)?$', text):
+    if re.match(r'^=\d+(\.\d+)?$', text.replace(',', '')):
         try:
             amount = float(text[1:].replace(',', ''))
             if amount.is_integer():
                 amount = int(amount)
-            user_totals[user_id] = amount
+            chat_totals[tracking_id] = amount
             bot.reply_to(message,
                 f"✏️ *စုစုပေါင်း ပြင်ပြီး:*\n`{amount:,} Ks`",
                 parse_mode='Markdown'
@@ -110,7 +124,7 @@ def handle_message(message):
             bot.reply_to(message, "❌ ဂဏန်း မှားနေသည်")
         return
 
-    # +5000 သို့မဟုတ် -3000 → total ထဲ ထည့်/နုတ်
+    # +5000 သို့မဟုတ် -3000 → group shared total ထဲ ထည့်/နုတ်
     match = re.match(r'^([+\-])(\d+(\.\d+)?)$', text.replace(',', ''))
     if match:
         sign = match.group(1)
@@ -119,16 +133,16 @@ def handle_message(message):
             amount = int(amount)
 
         if sign == '+':
-            total = add_amount(user_id, amount)
-            add_history(user_id, amount, total)
+            total = add_amount(tracking_id, amount)
+            add_history(tracking_id, amount, total, username)
             bot.reply_to(message,
                 f"✅ *{amount:,} Ks ထည့်ပြီး*\n"
                 f"💰 စုစုပေါင်း: `{total:,} Ks`",
                 parse_mode='Markdown'
             )
         else:
-            total = add_amount(user_id, -amount)
-            add_history(user_id, -amount, total)
+            total = add_amount(tracking_id, -amount)
+            add_history(tracking_id, -amount, total, username)
             bot.reply_to(message,
                 f"✅ *{amount:,} Ks နုတ်ပြီး*\n"
                 f"💰 စုစုပေါင်း: `{total:,} Ks`",
@@ -166,8 +180,6 @@ def handle_message(message):
     except Exception:
         if message.chat.type == 'private':
             bot.reply_to(message, "For now I don't know how to calculate such things 😔")
-        else:
-            pass
 
 @bot.inline_handler(lambda query: len(query.query) > 0)
 def query_text(inline_query):
@@ -197,10 +209,10 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Kiwii Calculator Bot is running 24/7!"
+    return "DarkCalculator Bot is running 24/7!"
 
 def run_bot():
-    print("Kiwii Calculator Bot စတင်အလုပ်လုပ်နေပါပြီ...")
+    print("DarkCalculator Bot စတင်အလုပ်လုပ်နေပါပြီ...")
     bot.polling(none_stop=True)
 
 if __name__ == "__main__":

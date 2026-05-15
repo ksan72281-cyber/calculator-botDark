@@ -2,6 +2,7 @@ import telebot
 import math
 import os
 import re
+import time
 from flask import Flask
 import threading
 from telebot.types import InlineQueryResultArticle, InputTextMessageContent
@@ -13,12 +14,10 @@ allowed_math_functions = {k: v for k, v in math.__dict__.items() if not k.starts
 allowed_math_functions['abs'] = abs
 allowed_math_functions['round'] = round
 
-# ✅ FIX: chat_id နဲ့ track လုပ်မယ် (group တစ်ခုလုံး balance share လုပ်နိုင်အောင်)
 chat_totals = {}
 chat_histories = {}
 
 def get_tracking_id(message):
-    """Group chat → chat_id သုံး | Private → user_id သုံး"""
     if message.chat.type == 'private':
         return message.from_user.id
     return message.chat.id
@@ -102,14 +101,12 @@ def handle_message(message):
     text = message.text.strip()
     username = message.from_user.first_name or message.from_user.username or ""
 
-    # Reset (text အနေနဲ့ ရေးလျှင်လည်း အလုပ်လုပ်မယ်)
     if text.lower() == 'reset':
         chat_totals[tracking_id] = 0
         chat_histories[tracking_id] = []
         bot.reply_to(message, "✅ Reset လုပ်ပြီး။ စုစုပေါင်း = 0 Ks")
         return
 
-    # =50000 → total ကို တိုက်ရိုက် သတ်မှတ်
     if re.match(r'^=\d+(\.\d+)?$', text.replace(',', '')):
         try:
             amount = float(text[1:].replace(',', ''))
@@ -124,7 +121,6 @@ def handle_message(message):
             bot.reply_to(message, "❌ ဂဏန်း မှားနေသည်")
         return
 
-    # +5000 သို့မဟုတ် -3000 → group shared total ထဲ ထည့်/နုတ်
     match = re.match(r'^([+\-])(\d+(\.\d+)?)$', text.replace(',', ''))
     if match:
         sign = match.group(1)
@@ -150,7 +146,6 @@ def handle_message(message):
             )
         return
 
-    # သာမန် တွက်ချက်မှု
     try:
         text_to_calc = text.replace('^', '**').replace('x', '*').replace('×', '*').replace(',', '')
 
@@ -211,9 +206,17 @@ app = Flask(__name__)
 def home():
     return "DarkCalculator Bot is running 24/7!"
 
+# ✅ FIX: Retry loop ထည့်ထားတယ် - connection drop ဖြစ်ရင် အလိုအလျောက် restart လုပ်မယ်
 def run_bot():
     print("DarkCalculator Bot စတင်အလုပ်လုပ်နေပါပြီ...")
-    bot.polling(none_stop=True)
+    while True:
+        try:
+            print("Polling စတင်နေသည်...")
+            bot.polling(none_stop=True, timeout=60, long_polling_timeout=60)
+        except Exception as e:
+            print(f"Bot error ဖြစ်သွားသည်: {e}")
+            print("၅ စက္ကန့်အကြာ restart လုပ်မည်...")
+            time.sleep(5)
 
 if __name__ == "__main__":
     thread = threading.Thread(target=run_bot)
